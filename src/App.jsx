@@ -1,122 +1,139 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+﻿import { useState } from "react";
+import { parseCsv, computeStats } from "./lib/stats";
+import { analyzeClass } from "./lib/api";
+import "./App.css";
 
-function App() {
-  const [count, setCount] = useState(0)
+const MAX_BYTES = 1024 * 1024;
 
+function List({ title, items }) {
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+    <section className="card">
+      <h3>{title}</h3>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
-export default App
+export default function App() {
+  const [language, setLanguage] = useState("en");
+  const [stats, setStats] = useState(null);
+  const [fileError, setFileError] = useState("");
+  const [result, setResult] = useState(null);
+  const [aiError, setAiError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    setStats(null);
+    setResult(null);
+    setAiError("");
+    setFileError("");
+    if (!file) return;
+    if (file.size > MAX_BYTES) {
+      setFileError("File is too large (maximum 1 MB).");
+      return;
+    }
+    try {
+      const text = await file.text();
+      setStats(computeStats(parseCsv(text)));
+    } catch (err) {
+      setFileError(err.message);
+    }
+  }
+
+  async function handleAnalyze() {
+    setLoading(true);
+    setAiError("");
+    setResult(null);
+    try {
+      setResult(await analyzeClass(stats, language));
+    } catch (err) {
+      setAiError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main>
+      <h1>Class Insights</h1>
+      <p>
+        Upload a CSV of class scores (one row per student). Names and IDs are
+        never sent anywhere; only summary numbers are shared with the AI.
+      </p>
+
+      <div className="controls">
+        <div>
+          <label htmlFor="csv">Scores file (.csv)</label>
+          <input id="csv" type="file" accept=".csv,text/csv" onChange={handleFile} />
+        </div>
+        <div>
+          <label htmlFor="lang">Summary language</label>
+          <select id="lang" value={language} onChange={(e) => setLanguage(e.target.value)}>
+            <option value="en">English</option>
+            <option value="ar">Egyptian Arabic</option>
+          </select>
+        </div>
+      </div>
+
+      <div aria-live="polite">
+        {fileError && <p role="alert" className="error">{fileError}</p>}
+      </div>
+
+      {stats && (
+        <section>
+          <h2>Statistics ({stats.students} students)</h2>
+          <div className="table-wrap">
+            <table>
+              <caption className="sr-only">Summary statistics per subject</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Subject</th>
+                  <th scope="col">Average</th>
+                  <th scope="col">Median</th>
+                  <th scope="col">Min</th>
+                  <th scope="col">Max</th>
+                  <th scope="col">Below 60</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(stats.subjects).map(([name, s]) => (
+                  <tr key={name}>
+                    <th scope="row">{name}</th>
+                    <td>{s.average}</td>
+                    <td>{s.median}</td>
+                    <td>{s.min}</td>
+                    <td>{s.max}</td>
+                    <td>{s.below_60}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button type="button" onClick={handleAnalyze} disabled={loading}>
+            {loading ? "Analyzing..." : "Get AI summary"}
+          </button>
+        </section>
+      )}
+
+      <div aria-live="polite">
+        {aiError && <p role="alert" className="error">{aiError}</p>}
+        {result && (
+          <div dir={language === "ar" ? "rtl" : "ltr"} lang={language}>
+            <h2>AI summary</h2>
+            <p>{result.summary}</p>
+            <div className="cards">
+              <List title="Strengths" items={result.strengths} />
+              <List title="Concerns" items={result.concerns} />
+              <List title="Next steps" items={result.next_steps} />
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
